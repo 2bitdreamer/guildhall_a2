@@ -41,18 +41,11 @@ struct ConnectedClient {
 	SOCKET m_socket;
 };
 
-
-
-
+unsigned int g_maxClients = 2;
 std::string g_identifier = "INVALID";
 std::list<ConnectedClient*> g_connectedClients;
 std::map<std::string, Command> g_commands;
 std::vector<ServerSocket> g_serverSockets;
-
-
-
-
-
 
 
 class NetworkSystem
@@ -70,19 +63,23 @@ class NetworkSystem
 
 void CommandQuit(void* clientSocket) {
 	SOCKET sock = (SOCKET)clientSocket;
-	int success = closesocket(sock);
+	closesocket(sock);
 
 	for (auto it = g_connectedClients.begin(); it != g_connectedClients.end(); ) {
 		ConnectedClient* cc = *it;
 		if (cc->m_socket == sock) {
 			it = g_connectedClients.erase(it);
+			break;
+		}
+		else {
+			++it;
 		}
 	}
 }
 
 void CommandServerQuit(void* serverSocket) {
 
-	SOCKET ss = (SOCKET)serverSocket;
+	(void*)serverSocket;
 	for (auto it = g_connectedClients.begin(); it != g_connectedClients.end(); ++it) {
 		ConnectedClient* cc = *it;
 		SOCKET sock = cc->m_socket;
@@ -270,6 +267,7 @@ SOCKET BindAddress( const char* ip /*= "localhost"*/, const char* port /*= g_ser
 
 void ReceiveData(int bufferSize, char* buffer)
 {
+
 	for (auto it = g_connectedClients.begin(); it != g_connectedClients.end(); ) {
 		ConnectedClient* cc = *it;
 		SOCKET& sock = cc->m_socket;
@@ -353,7 +351,7 @@ void WaitForConnection(SOCKET& sock) {
 		else {
 			printf("Failed to accept: [%i] %s", error, WindowsErrorAsString(error).c_str());
 		}
-	}
+	}  
 	else {
 		printf("Got a connection; waiting for data!\n");
 		bool isConnectedPastLogin = false;
@@ -400,6 +398,12 @@ void WaitForConnection(SOCKET& sock) {
 				delete cc;
 				std::string badString = "BAD";
 				send(theirSocket, badString.c_str(), badString.size(), 0);
+			}
+
+			if (g_connectedClients.size() > g_maxClients) {
+				CommandQuit((void*)theirSocket);
+				_getch();
+				exit(0);
 			}
 		}
 	}
@@ -516,7 +520,7 @@ void ClientLoop(SOCKET& host_sock)
 }
 
 //-------------------------------------------------------------------------------------------------------
-void ClientJoin(const char* addrname, const char* port, const char* identifier)
+void ClientJoin(const char* addrname, const char* port)
 {
 	SOCKET host_sock = INVALID_SOCKET;
 	addrinfo hints;
@@ -583,7 +587,7 @@ int _cdecl main( int argc, char const **argv )
 	   char const *addr = argv[1];
       g_identifier = std::string(argv[2]);
       printf( "Now joining with ID \"%s\" to [%s]\n", g_identifier.c_str(), addr );
-      ClientJoin( addr, g_serverPort, g_identifier.c_str());
+      ClientJoin( addr, g_serverPort);
    } else {
       printf( "Enter hostname and identifier\n" );
    }
